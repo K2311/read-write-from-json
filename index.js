@@ -3,6 +3,9 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const { error } = require('console');
+const logger = require('./logger');
+const { saveDataSchema  } = require('./validations/validation');
+const validationMiddleware = require('./validations/validationMiddleware');
 const app = express();
 const PORT = 3000;
 
@@ -13,16 +16,24 @@ app.use(bodyParser.json());
 const readJsonData = ()=>{
     try {
         const data = fs.readFileSync(filePath,'utf8');
+        if (!data.trim()) {
+            logger.warn('JSON file is empty. Initializing with an empty array.',{ filePath });
+            return [];
+        }
         return JSON.parse(data);
     } catch (error) {
         if(error==="ENOENT"){
-            console.error('File not found:', filePath);
+            logger.error('File not found:', { filePath });
+            return [];
         }else if(error.name==='SyntaxError'){
-            console.error('Invalid JSON format in file:', filePath);
+            logger.error('Corrupted JSON file. Initializing with an empty array.', { filePath });
+            writeJsonData([]); 
+            return [];
         }else{
-            console.error('Error reading the file:', error.message);
+            logger.error('Error reading the file:', { message: error.message });
+            throw error;
         }
-        throw error;
+        
     }
     
 }
@@ -31,9 +42,9 @@ const writeJsonData = (data)=>{
     try {
         const jsonData = JSON.stringify(data, null, 2);
         fs.writeFileSync(filePath, jsonData, 'utf8');
-        console.log('Data successfully written to file.');
+        logger.info('Data successfully written to file.',{ filePath });
     } catch (error) {
-        console.error('Error writing to file:', error.message);
+        logger.error('Error writing to file:', { message: error.message });
         throw error;
     }
 }
@@ -55,21 +66,8 @@ app.get('/api/all',(req,res)=>{
     }
 });
 
-app.post('/api/save',(req,res)=>{
+app.post('/api/save',validationMiddleware(saveDataSchema),(req,res)=>{
     const { name, email } = req.body;
-    const errors = [];
-
-    if(!name){
-        errors.push('Name is required');
-    }
-    if(!email  || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-        errors.push('A valid email is required');
-    }
-    
-
-    if(errors.length > 0){
-        return res.status(400).json({errors});
-    }
 
     try {
         const data = readJsonData();
@@ -131,8 +129,13 @@ app.delete('/api/id/:id',(req,res)=>{
 
 });
 
-
+app.use((err, req, res, next) => {
+    logger.error('Unhandled error', { message: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Internal Server Error' });
+});
 
 app.listen(PORT, () => {
+    logger.info(`Server running on http://localhost:${PORT}`);
     console.log(`Server running on http://localhost:${PORT}`);
+    
 });

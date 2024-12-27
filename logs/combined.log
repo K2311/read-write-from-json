@@ -1,0 +1,5 @@
+2024-Dec-27 16:39:04 [INFO]: Server running on http://localhost:3000
+2024-Dec-27 16:40:19 [ERROR]: Error reading the file: ENOENT: no such file or directory, open 'E:\read-write-from-json\json-files\data.json'
+2024-Dec-27 17:20:25 [INFO]: Server running on http://localhost:3000
+2024-Dec-27 17:20:45 [INFO]: Data successfully written to file. | Meta: {"filePath":"E:\\read-write-from-json\\json-files\\data.json"}
+2024-Dec-27 17:54:45 [INFO]: Server running on http://localhost:3000
