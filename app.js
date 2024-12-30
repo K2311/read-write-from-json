@@ -4,11 +4,41 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const { error } = require('console');
+const redis = require('redis');
 const logger = require('./logger');
 const { saveDataSchema  } = require('./validations/validation');
 const validationMiddleware = require('./validations/validationMiddleware');
 const app = express();
 const PORT = 3000;
+const REDIS_PORT = process.env.REDIS_PORT || 6380;
+
+// Create Redis client
+const redisClient = redis.createClient({
+    host: 'localhost',
+    port: REDIS_PORT,
+});
+
+// Connect to Redis
+redisClient.on('connect', () => {
+    console.log('Successfully connected to Redis!');
+});
+
+redisClient.on('error', (err) => {
+    console.error('Redis error:', err);
+});
+
+async function ensureRedisConnected() {
+    try {
+        if (!redisClient.isOpen) {
+            await redisClient.connect();
+        }
+        return true;
+    } catch (err) {
+        console.error('Redis connection error:', err);
+        return false;
+    }
+}
+ensureRedisConnected();
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -61,14 +91,42 @@ const writeJsonData = (data)=>{
 app.get('/', (req, res) => {
     res.send('Welcome to the API!');
 });
-app.get('/api/all',(req,res)=>{
+
+app.get('/api/all', async (req, res) => {
+    const cacheKey = 'allData';
+
+    if (!await ensureRedisConnected()) {
+        return res.status(500).json({ error: 'Redis client is not connected' });
+    }
+
     try {
+        // Try to get cached data
+        const cachedData = await redisClient.get(cacheKey);
+
+        if (cachedData) {
+            console.log('Returning data from cache');
+            return res.json(JSON.parse(cachedData));
+        }
+
+        // If no cached data, read from the JSON file
         const data = readJsonData();
-        res.json(data);
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(data));  // Cache the data for 1 hour
+        console.log('Returning data from JSON file');
+        return res.json(data);
     } catch (error) {
-        res.status(500).json({error:'Failed to retrieve data. Please try again later.'});
+        console.error('Error fetching data:', error);
+        return res.status(500).json({ error: 'Failed to retrieve data. Please try again later.' });
     }
 });
+
+// app.get('/api/all',(req,res)=>{
+//     try {
+//         const data = readJsonData();
+//         res.json(data);
+//     } catch (error) {
+//         res.status(500).json({error:'Failed to retrieve data. Please try again later.'});
+//     }
+// });
 
 app.post('/api/save',validationMiddleware(saveDataSchema),(req,res)=>{
     const { name, email } = req.body;
