@@ -11,9 +11,9 @@ const app = express();
 const PORT = 3000;
 
 const limiter = rateLimit({
-    windowMs:15 * 60 * 1000,
-    max:10,
-    message: 'Too many requests from this IP, please try again after 15 minutes',
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, 
+    message: { message: 'Too many requests, please try again later.' },
 });
 
 app.use(limiter);
@@ -58,13 +58,8 @@ const writeJsonData = (data)=>{
     }
 }
 
-app.get('/',(req,res)=>{
-    try {
-        const data = readJsonData();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({error:'Failed to retrieve data. Please try again later.'});
-    }
+app.get('/', (req, res) => {
+    res.send('Welcome to the API!');
 });
 app.get('/api/all',(req,res)=>{
     try {
@@ -143,8 +138,4 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-    logger.info(`Server running on http://localhost:${PORT}`);
-    console.log(`Server running on http://localhost:${PORT}`);
-    
-});
+module.exports = app;
