@@ -11,11 +11,14 @@ const validationMiddleware = require('./validations/validationMiddleware');
 const app = express();
 const PORT = 3000;
 const REDIS_PORT = process.env.REDIS_PORT || 6380;
+console.log('REDIS_PORT:',REDIS_PORT);
 
 // Create Redis client
 const redisClient = redis.createClient({
-    host: 'localhost',
-    port: REDIS_PORT,
+    socket: {
+        port: REDIS_PORT, 
+        host: '127.0.0.1', 
+    },
 });
 
 // Connect to Redis
@@ -119,14 +122,6 @@ app.get('/api/all', async (req, res) => {
     }
 });
 
-// app.get('/api/all',(req,res)=>{
-//     try {
-//         const data = readJsonData();
-//         res.json(data);
-//     } catch (error) {
-//         res.status(500).json({error:'Failed to retrieve data. Please try again later.'});
-//     }
-// });
 
 app.post('/api/save',validationMiddleware(saveDataSchema),(req,res)=>{
     const { name, email } = req.body;
@@ -147,10 +142,22 @@ app.post('/api/save',validationMiddleware(saveDataSchema),(req,res)=>{
     }
 });
 
-app.get('/api/id/:id',(req,res)=>{
+app.get('/api/id/:id',async (req,res)=>{
+    const cacheKey = 'singleData';
     const id = parseInt(req.params.id, 10);
 
+    if (!await ensureRedisConnected()) {
+        return res.status(500).json({ error: 'Redis client is not connected' });
+    }
+
     try {
+        const cachedData = await redisClient.get(cacheKey);
+
+        if (cachedData) {
+            console.log('Returning item from cache');
+            return res.json(JSON.parse(cachedData));
+        }
+
         const data = readJsonData();
         if (!Array.isArray(data) || data.length === 0) {
             return res.status(404).json({ error: 'No data available.' });
@@ -160,6 +167,9 @@ app.get('/api/id/:id',(req,res)=>{
         if(!item){
             return res.status(404).json({ error:'Data not found' });
         }
+
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(item)); 
+        console.log('Returning item from JSON file');
         return res.json(item);
         
     } catch (error) {
